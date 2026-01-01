@@ -2,6 +2,10 @@
 
 A modern, interactive 3D Rubik's Cube solver built with React, Three.js, and TypeScript. This application provides a complete solution for visualizing, manipulating, and solving Rubik's Cubes with an intuitive 3D interface and advanced solving algorithms.
 
+![Rubik's Cube Solver](./public/Rubik_photo.png)
+
+![Rubik's Cube Solver Demo](./public/rubik_GIF.gif)
+
 ## Features
 
 ### 3D Visualization
