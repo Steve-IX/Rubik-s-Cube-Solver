@@ -80,6 +80,27 @@ The built files will be in the `dist` directory. You can preview the production 
 npm run preview
 ```
 
+## Deployment
+
+### Vercel
+
+This project is configured for easy deployment on Vercel:
+
+1. Push your code to GitHub
+2. Import your repository in [Vercel](https://vercel.com)
+3. Vercel will automatically detect the Vite configuration
+4. The `vercel.json` file includes all necessary settings:
+   - Build command: `npm run build`
+   - Output directory: `dist`
+   - Framework: Vite
+   - SPA routing configuration
+
+The application will be automatically deployed on every push to the main branch.
+
+### Other Platforms
+
+For other hosting platforms, build the project and serve the `dist` directory as a static site. Ensure your server is configured to serve `index.html` for all routes (SPA routing).
+
 ## Usage
 
 ### Playing Mode
