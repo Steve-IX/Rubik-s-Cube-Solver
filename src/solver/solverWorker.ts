@@ -1,18 +1,20 @@
 import type { CubeState } from '../models/CubeState';
 
 export interface SolverMessage {
-  type: 'init' | 'solve' | 'cancel';
+  type: 'init' | 'solve' | 'cancel' | 'scramble';
   payload?: {
     cubeState?: CubeState;
+    length?: number;
   };
 }
 
 export interface SolverResponse {
-  type: 'init' | 'solve' | 'cancel' | 'error';
+  type: 'init' | 'solve' | 'cancel' | 'error' | 'scramble';
   success?: boolean;
   payload?: {
-    solution: string;
-    moves: string[];
+    solution?: string;
+    moves?: string[];
+    faceletString?: string;
   };
   error?: string;
 }
@@ -130,7 +132,12 @@ export class SolverWorker {
           clearTimeout(timeout);
           if (handlerCleanup) handlerCleanup();
           console.log('Solve completed, received solution from worker');
-          resolve(event.data.payload);
+          const payload = event.data.payload;
+          if (payload.solution !== undefined && payload.moves !== undefined) {
+            resolve({ solution: payload.solution, moves: payload.moves });
+          } else {
+            reject(new Error('Invalid solve response: missing solution or moves'));
+          }
         } else if (event.data.type === 'error') {
           clearTimeout(timeout);
           if (handlerCleanup) handlerCleanup();
@@ -149,6 +156,47 @@ export class SolverWorker {
       this.worker?.postMessage({
         type: 'solve',
         payload: { cubeState },
+      });
+    });
+  }
+
+  async scramble(length: number = 25): Promise<{ faceletString: string; moves: string[] }> {
+    if (!this.worker) {
+      throw new Error('Worker not available');
+    }
+
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.worker?.removeEventListener('message', handler);
+        reject(new Error('Scramble timeout after 10 seconds'));
+      }, 10000);
+
+      const handler = (event: MessageEvent<SolverResponse>) => {
+        if (event.data.type === 'scramble' && event.data.success && event.data.payload) {
+          clearTimeout(timeout);
+          this.worker?.removeEventListener('message', handler);
+          console.log('Scramble completed, received facelet string from worker');
+          resolve({
+            faceletString: event.data.payload.faceletString!,
+            moves: event.data.payload.moves!,
+          });
+        } else if (event.data.type === 'error') {
+          clearTimeout(timeout);
+          this.worker?.removeEventListener('message', handler);
+          const errorMsg = 'error' in event.data ? event.data.error : 'Scramble failed';
+          console.error('Scramble error from worker:', errorMsg);
+          reject(new Error(errorMsg));
+        }
+      };
+
+      this.worker?.addEventListener('message', handler);
+      this.worker?.postMessage({
+        type: 'scramble',
+        payload: { length },
       });
     });
   }

@@ -265,6 +265,7 @@ export function Cube3D({ cubeState }: Cube3DProps) {
   const playback = useSelector((state: RootState) => state.ui.playback);
   const mode = useSelector((state: RootState) => state.ui.mode);
   const solveSteps = useSelector((state: RootState) => state.solve.steps);
+  const initialState = useSelector((state: RootState) => state.solve.initialState);
   
   // Animation state
   const [moveQueue, setMoveQueue] = useState<Move[]>([]);
@@ -276,44 +277,99 @@ export function Cube3D({ cubeState }: Cube3DProps) {
   // Display state (what we show, may be mid-animation)
   const [displayState, setDisplayState] = useState<CubeState>(cubeState);
   
-  // Track previous step index for detecting step changes
-  const prevStepIndexRef = useRef(playback.currentStepIndex);
-  const prevCubeStateRef = useRef(cubeState);
+  // Track the step index that displayState currently reflects
+  // -1 means we're showing the initial state (before any moves)
+  const displayedStepRef = useRef<number>(-1);
+  const prevModeRef = useRef(mode);
+
+  // Reset when entering/leaving solve mode
+  useEffect(() => {
+    if (mode === 'solve' && prevModeRef.current !== 'solve') {
+      // Entering solve mode - reset to initial state
+      displayedStepRef.current = -1;
+      setDisplayState({ ...initialState });
+      setMoveQueue([]);
+    } else if (mode !== 'solve' && prevModeRef.current === 'solve') {
+      // Leaving solve mode - sync with current cube state
+      displayedStepRef.current = -1;
+      setDisplayState({ ...cubeState });
+      setMoveQueue([]);
+    }
+    prevModeRef.current = mode;
+  }, [mode, initialState, cubeState]);
 
   // Handle step changes in solve mode
   useEffect(() => {
-    if (mode === 'solve' && solveSteps.length > 0) {
-      const currentStep = solveSteps[playback.currentStepIndex];
-      if (currentStep && prevStepIndexRef.current !== playback.currentStepIndex) {
-        const direction = playback.currentStepIndex > prevStepIndexRef.current ? 1 : -1;
-        
-        if (direction === 1) {
-          // Moving forward - animate the current move
-          setMoveQueue(prev => [...prev, currentStep.move]);
-        } else {
-          // Moving backward - reverse the previous move
-          const prevStep = solveSteps[prevStepIndexRef.current];
-          if (prevStep) {
-            const reverseMove: Move = {
-              ...prevStep.move,
-              direction: prevStep.move.direction === 2 ? 2 : -prevStep.move.direction,
-              notation: prevStep.move.notation, // Will be visually the same
-            };
-            setMoveQueue(prev => [...prev, reverseMove]);
+    if (mode !== 'solve' || solveSteps.length === 0) return;
+    
+    const targetStep = playback.currentStepIndex;
+    const currentDisplayed = displayedStepRef.current;
+    
+    // If we're at step -1, ensure we show the initial scrambled state
+    if (targetStep === -1 && currentDisplayed !== -1) {
+      // Reset to initial state
+      displayedStepRef.current = -1;
+      setDisplayState({ ...initialState });
+      setMoveQueue([]);
+      return;
+    }
+    
+    // If target is different from what we're displaying, queue moves to get there
+    if (targetStep !== currentDisplayed && targetStep >= 0) {
+      // Calculate how many steps to move and in which direction
+      if (targetStep > currentDisplayed) {
+        // Moving forward
+        // Queue all moves from currentDisplayed+1 to targetStep
+        const movesToAdd: Move[] = [];
+        for (let i = currentDisplayed + 1; i <= targetStep; i++) {
+          const step = solveSteps[i];
+          if (step) {
+            movesToAdd.push(step.move);
           }
         }
-        
-        prevStepIndexRef.current = playback.currentStepIndex;
+        if (movesToAdd.length > 0) {
+          setMoveQueue(prev => [...prev, ...movesToAdd]);
+        }
+      } else if (targetStep < currentDisplayed) {
+        // Moving backward
+        // Queue reverse moves from currentDisplayed down to targetStep+1
+        const movesToAdd: Move[] = [];
+        for (let i = currentDisplayed; i > targetStep; i--) {
+          const step = solveSteps[i];
+          if (step) {
+            const reverseMove: Move = {
+              ...step.move,
+              direction: step.move.direction === 2 ? 2 : -step.move.direction,
+              notation: step.move.notation,
+            };
+            movesToAdd.push(reverseMove);
+          }
+        }
+        if (movesToAdd.length > 0) {
+          setMoveQueue(prev => [...prev, ...movesToAdd]);
+        }
+      }
+      // Update the ref to target (will be reflected visually after animations complete)
+      displayedStepRef.current = targetStep;
+    }
+  }, [mode, playback.currentStepIndex, solveSteps, initialState]);
+
+  // Ensure step -1 always shows initial scrambled state
+  useEffect(() => {
+    if (mode === 'solve' && solveSteps.length > 0 && playback.currentStepIndex === -1) {
+      // When at step -1, we should show the initial scrambled state
+      if (displayedStepRef.current !== -1) {
+        displayedStepRef.current = -1;
+        setDisplayState({ ...initialState });
+        setMoveQueue([]);
       }
     }
-  }, [mode, playback.currentStepIndex, solveSteps]);
+  }, [mode, solveSteps.length, playback.currentStepIndex, initialState]);
 
-  // Sync display state with cube state when not animating
+  // Sync display state with cube state when not in solve mode
   useEffect(() => {
-    if (mode !== 'solve' && prevCubeStateRef.current !== cubeState) {
-      // Create a new reference to force recalculation
+    if (mode !== 'solve') {
       setDisplayState({ ...cubeState });
-      prevCubeStateRef.current = cubeState;
     }
   }, [cubeState, mode]);
 
@@ -322,27 +378,12 @@ export function Cube3D({ cubeState }: Cube3DProps) {
     // Remove the completed move from queue
     setMoveQueue(prev => prev.slice(1));
     
-    // Update display state after animation - this ensures colors are correctly mapped
+    // Apply the completed move to the display state
     setDisplayState(prev => {
       const newState = CubeEngine.applyMove(prev, completedMove);
-      // Force a complete recalculation by returning a new object reference
       return { ...newState };
     });
   }, []);
-
-  // Get initial display state for solve mode
-  useEffect(() => {
-    if (mode === 'solve' && solveSteps.length > 0) {
-      // Set initial state before any moves
-      if (playback.currentStepIndex === 0 && solveSteps[0]) {
-        // Show the state BEFORE the first move (initial scrambled state)
-        const initialState = cubeState; // This should be the scrambled state
-        setDisplayState(initialState);
-      }
-    } else {
-      setDisplayState(cubeState);
-    }
-  }, [mode, solveSteps.length]);
 
   return (
     <div className="w-full h-full relative">
@@ -398,3 +439,4 @@ export function Cube3D({ cubeState }: Cube3DProps) {
     </div>
   );
 }
+

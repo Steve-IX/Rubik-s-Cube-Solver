@@ -68,16 +68,23 @@ export function PlaybackControllerComponent() {
     }
   }, [playback.isPlaying, playback.speed, playback.currentStepIndex, solveSteps.length, dispatch, mode]);
 
-  // Sync cube state with current step when manually stepping
+  // Sync cube state with current step (only for Redux state tracking, not visual display)
+  // Note: In solve mode, Cube3D manages its own displayState for animations
+  // We only update Redux state when leaving solve mode or when at the final step
   useEffect(() => {
-    if (mode === 'solve' && solveSteps.length > 0 && !playback.isPlaying) {
-      const currentStep = solveSteps[playback.currentStepIndex];
-      if (currentStep) {
-        // The cube state after the current step is applied
-        // dispatch(setCubeState(currentStep.resultState));
+    if (mode === 'solve' && solveSteps.length > 0 && playback.currentStepIndex >= 0) {
+      // Only update Redux state when we reach the final step (fully solved)
+      // This ensures the cube state is correct when leaving solve mode
+      // Don't update when step index is -1 (initial scrambled state)
+      if (playback.currentStepIndex === solveSteps.length - 1) {
+        const finalStep = solveSteps[playback.currentStepIndex];
+        if (finalStep) {
+          dispatch(setCubeState(finalStep.cubeState));
+        }
       }
+      // For all other steps, let Cube3D handle the visual state through animations
     }
-  }, [playback.currentStepIndex, solveSteps, mode, playback.isPlaying, dispatch]);
+  }, [playback.currentStepIndex, solveSteps, mode, dispatch]);
 
   return null;
 }

@@ -1,7 +1,7 @@
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, RootState } from '../../store';
 import { startSolving, setSolution, setSolvingError } from '../../store/slices/solveSlice';
-import { setSidebarOpen } from '../../store/slices/uiSlice';
+import { setSidebarOpen, setCurrentStepIndex, setMode } from '../../store/slices/uiSlice';
 import { SolverWorker } from '../../solver/solverWorker';
 import { solveCube } from '../../solver/mainThreadSolver';
 import { parseSolution } from '../../engine/NotationParser';
@@ -112,12 +112,18 @@ export function SolveButton() {
         steps.push(createSolveStep(i, move, currentState));
       }
 
+      // Reset step index to -1 (before any moves) so the cube shows initial state
+      dispatch(setCurrentStepIndex(-1));
+      
       dispatch(
         setSolution({
           steps,
           solutionString: solution,
         })
       );
+      
+      // Switch to solve mode to display the solution
+      dispatch(setMode('solve'));
     } catch (error: any) {
       console.error('Solve error:', error);
       const errorMessage = error?.message || error?.toString() || 'Failed to solve cube';

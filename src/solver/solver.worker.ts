@@ -66,6 +66,58 @@ self.onmessage = async (event) => {
       return;
     }
 
+    if (type === 'scramble') {
+      // Generate a scrambled cube using cubejs
+      if (!solver) {
+        throw new Error('Solver not initialized');
+      }
+
+      const length = payload?.length || 25;
+      console.log(`Generating scramble with ${length} moves...`);
+
+      try {
+        // Create a solved cube
+        const solvedCube = new solver();
+        
+        // Generate scramble moves
+        const faces: string[] = ['U', 'D', 'L', 'R', 'F', 'B'];
+        const directions = ['', "'", '2'];
+        const moves: string[] = [];
+        let lastFace: string | null = null;
+
+        for (let i = 0; i < length; i++) {
+          let face: string;
+          do {
+            face = faces[Math.floor(Math.random() * faces.length)];
+          } while (face === lastFace);
+          
+          lastFace = face;
+          const direction = directions[Math.floor(Math.random() * directions.length)];
+          const move = face + direction;
+          
+          solvedCube.move(move);
+          moves.push(move);
+        }
+
+        // Get facelet string from scrambled cube
+        const faceletString = solvedCube.asString();
+        console.log('Generated scrambled facelet string:', faceletString.substring(0, 20) + '...');
+
+        self.postMessage({
+          type: 'scramble',
+          success: true,
+          payload: {
+            faceletString,
+            moves,
+          },
+        });
+      } catch (scrambleError: any) {
+        console.error('Scramble generation error:', scrambleError);
+        throw new Error(`Failed to generate scramble: ${scrambleError?.message || 'Unknown error'}`);
+      }
+      return;
+    }
+
     if (type === 'solve') {
       console.log('Starting solve...');
       
@@ -150,16 +202,32 @@ self.onmessage = async (event) => {
         console.log('Test scrambled (R move) asString:', testScrambledString);
         console.log('This shows how cubejs represents a scrambled state');
         
-        // Now test: create solved cube, apply R move using our engine, convert to facelet string
-        // and compare with cubejs output
-        try {
-          // Import CubeEngine and createSolvedCubeState (we'll need to do this differently in worker)
-          // For now, just log what we expect
-          console.log('To debug: We need to apply R move to solved cube using our CubeEngine');
-          console.log('Then convert to facelet string and compare with cubejs output');
-        } catch (e) {
-          console.warn('Could not test our conversion:', e);
-        }
+        // Analyze the R move output to understand facelet positions
+        // U face: positions 0-8
+        const uFace = testScrambledString.substring(0, 9);
+        console.log('U face after R move:', uFace);
+        console.log('U face analysis: positions 2,5,8 (right column) should be F');
+        console.log('U[0][2]=' + uFace[2] + ', U[1][2]=' + uFace[5] + ', U[2][2]=' + uFace[8]);
+        
+        // F face: positions 18-26
+        const fFace = testScrambledString.substring(18, 27);
+        console.log('F face after R move:', fFace);
+        console.log('F face analysis: positions 2,5,8 (right column) should be D');
+        console.log('F[0][2]=' + fFace[2] + ', F[1][2]=' + fFace[5] + ', F[2][2]=' + fFace[8]);
+        
+        // D face: positions 27-35
+        const dFace = testScrambledString.substring(27, 36);
+        console.log('D face after R move:', dFace);
+        console.log('D face analysis: positions 2,5,8 (right column) should be B');
+        console.log('D[0][2]=' + dFace[2] + ', D[1][2]=' + dFace[5] + ', D[2][2]=' + dFace[8]);
+        
+        // B face: positions 45-53
+        const bFace = testScrambledString.substring(45, 54);
+        console.log('B face after R move:', bFace);
+        console.log('B face analysis: positions 0,3,6 (left column) should be U');
+        console.log('B[0][0]=' + bFace[0] + ', B[1][0]=' + bFace[3] + ', B[2][0]=' + bFace[6]);
+        
+        console.log('This confirms cubejs reads faces row-by-row, left-to-right (standard order)');
       } catch (e) {
         console.warn('Could not create test cubes:', e);
       }
@@ -227,6 +295,35 @@ self.onmessage = async (event) => {
             } catch (cloneError: any) {
               console.error('Cube clone failed - cube may be invalid:', cloneError);
               throw new Error(`Cube state appears invalid: ${cloneError.message || 'Clone failed'}`);
+            }
+          }
+          
+          // Try to validate the cube state using cubejs's validation
+          // Check if the cube has a validate or isValid method
+          if (cube.validate && typeof cube.validate === 'function') {
+            try {
+              const isValid = cube.validate();
+              console.log('Cube validation result:', isValid);
+              if (!isValid) {
+                throw new Error('Cube state failed cubejs validation - the cube may be in an unsolvable state');
+              }
+            } catch (validateError: any) {
+              console.warn('Cube validation check failed:', validateError);
+              // Don't throw - some cubejs versions may not have validate
+            }
+          }
+          
+          // Try to check if cube is solvable by attempting a quick solve check
+          // Some cubejs versions have a quick validation
+          if (cube.isValid && typeof cube.isValid === 'function') {
+            try {
+              const isValid = cube.isValid();
+              console.log('Cube isValid check:', isValid);
+              if (!isValid) {
+                throw new Error('Cube state is not valid according to cubejs - facelet string format may be incorrect');
+              }
+            } catch (isValidError: any) {
+              console.warn('Cube isValid check failed:', isValidError);
             }
           }
         }

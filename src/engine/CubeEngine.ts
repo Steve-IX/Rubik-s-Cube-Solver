@@ -64,19 +64,30 @@ export class CubeEngine {
 
   /**
    * Rotate a 3x3 matrix 90 degrees clockwise
+   * 
+   * For a 3x3 matrix, rotating 90° clockwise:
+   * [0,0] [0,1] [0,2]     [2,0] [1,0] [0,0]
+   * [1,0] [1,1] [1,2]  →  [2,1] [1,1] [0,1]
+   * [2,0] [2,1] [2,2]     [2,2] [1,2] [0,2]
+   * 
+   * Formula: new[i][j] = old[2-j][i]
    */
   private static rotateFaceMatrix(face: import('../utils/colorUtils').Color[][]): void {
-    // Transpose and reverse each row
     const n = face.length;
-    // Transpose
+    // Create a copy to avoid modifying while reading
+    const rotated: import('../utils/colorUtils').Color[][] = [];
     for (let i = 0; i < n; i++) {
-      for (let j = i; j < n; j++) {
-        [face[i][j], face[j][i]] = [face[j][i], face[i][j]];
+      rotated[i] = [];
+      for (let j = 0; j < n; j++) {
+        // Rotate 90° clockwise: new[i][j] = old[n-1-j][i]
+        rotated[i][j] = face[n - 1 - j][i];
       }
     }
-    // Reverse each row
+    // Copy rotated matrix back to original
     for (let i = 0; i < n; i++) {
-      face[i].reverse();
+      for (let j = 0; j < n; j++) {
+        face[i][j] = rotated[i][j];
+      }
     }
   }
 
